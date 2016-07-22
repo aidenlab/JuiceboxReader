@@ -10,4 +10,4 @@ Currently only supporting matrices.
 Must be compiled with the -lz flag to include the zlib.h library:
 `g++ -lz -o  juicebox-quick-dump dump.cc`
 
-Usage: juicebox-quick-dump <NONE/VC/VC_SQRT/KR> <hicFile(s)> <chr1>[:x1:x2] <chr2>[:y1:y2] <BP/FRAG> <binsize> 
+Usage: `juicebox-quick-dump <NONE/VC/VC_SQRT/KR> <hicFile(s)> <chr1>[:x1:x2] <chr2>[:y1:y2] <BP/FRAG> <binsize> `
