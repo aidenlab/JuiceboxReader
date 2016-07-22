@@ -328,14 +328,9 @@ set<int> getBlockNumbersForRegionFromBinPosition(int* regionIndices, int blockBi
        }
      }
    }
-   //   sort(blocksSet); // sets are already sorted
-   /*   List<Integer> blocksToIterateOver = new ArrayList<Integer>(blocksSet);
-   Collections.sort(blocksToIterateOver);
-   return blocksToIterateOver;
-   }*/
+
    return blocksSet;
 }
-
 
 
 vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
@@ -363,10 +358,10 @@ vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
   inflate(&infstream, Z_NO_FLUSH);
   inflateEnd(&infstream);
   int uncompressedSize=infstream.total_out;
-  cerr << "compression ratio: " << uncompressedSize*1.0/idx.size << endl;
+  //cerr << "compression ratio: " << uncompressedSize*1.0/idx.size << endl;
   // create stream from buffer for ease of use
   membuf sbuf(uncompressedBytes, uncompressedBytes + uncompressedSize);
-  std::istream bufferin(&sbuf);
+  istream bufferin(&sbuf);
   int nRecords;
   bufferin.read((char*)&nRecords, sizeof(int));
   vector<contactRecord> v(nRecords);
@@ -470,68 +465,28 @@ vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
   return v;
 }
 
-/*
-readNormalizedBlock
+vector<double> readNormalizationVector(ifstream& fin, int size, long position) {
+  char buffer[size];
+  fin.seekg(position, ios::beg);
+  fin.read(buffer, size);
+  membuf sbuf(buffer, buffer + size);
+  istream bufferin(&sbuf);
+  int nValues;
+  bufferin.read((char*)&nValues, sizeof(int));
+  vector<double> values(nValues);
+  //  bool allNaN = true;
 
-
- */
-
-
-/*
-
-        for (Integer blockNumber : blocksToIterateOver) {
-            Block b = reader.readNormalizedBlock(blockNumber, MatrixZoomData.this, norm);
-            if (b != null) {
-                for (ContactRecord rec : b.getContactRecords()) {
-                    float counts = rec.getCounts();
-                    int x = rec.getBinX();
-                    int y = rec.getBinY();
-                    int xActual = x * zoom.getBinSize();
-                    int yActual = y * zoom.getBinSize();
-                    float oeVal = 0f;
-                    if (matrixType == MatrixType.OE) {
-                        int dist = Math.abs(x - y);
-                        double expected = 0;
-                        try {
-                            expected = df.getExpectedValue(chr1.getIndex(), dist);
-                        } catch (Exception e) {
-                            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                        }
-                        double observed = rec.getCounts(); // Observed is already normalized
-                        oeVal = (float) (observed / expected);
-                    }
-                    if (!useRegionIndices || // i.e. use full matrix
-                            // or check regions that overlap with upper left
-                            (xActual >= regionIndices[0] && xActual <= regionIndices[1] &&
-                                    yActual >= regionIndices[2] && yActual <= regionIndices[3]) ||
-                            // or check regions that overlap with lower left
-                            (isIntraChromosomal && yActual >= regionIndices[0] && yActual <= regionIndices[1] &&
-                                    xActual >= regionIndices[2] && xActual <= regionIndices[3])) {
-                        // but leave in upper right triangle coordinates
-                        if (usePrintWriter) {
-                            if (matrixType == MatrixType.OBSERVED) {
-                                printWriter.println(xActual + "\t" + yActual + "\t" + counts);
-                            } else if (matrixType == MatrixType.OE) {
-                                printWriter.println(xActual + "\t" + yActual + "\t" + oeVal);
-                            }
-                        } else {
-                            if (matrixType == MatrixType.OBSERVED) {
-                                les.writeInt(x);
-                                les.writeInt(y);
-                                les.writeFloat(counts);
-                            } else if (matrixType == MatrixType.OE) {
-                                les.writeInt(x);
-                                les.writeInt(y);
-                                les.writeFloat(oeVal);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-*/
-
-
+  for (int i = 0; i < nValues; i++) {
+    double d;
+    bufferin.read((char*)&d, sizeof(double));
+    values[i] = d;
+    /* if (!Double.isNaN(values[i])) {
+      allNaN = false;
+      }*/
+  }
+  //  if (allNaN) return null;
+  return values;
+}
 
 int main(int argc, char *argv[])
 {
@@ -586,8 +541,9 @@ int main(int argc, char *argv[])
   
   int c1=min(chr1ind,chr2ind);
   int c2=max(chr1ind,chr2ind);
-  int origRegionIndices[4];
-  int regionIndices[4];
+  int origRegionIndices[4]; // as given by user
+  int regionIndices[4]; // used to find the blocks we need to access
+  // reverse order if necessary
   if (chr1ind > chr2ind) {
     origRegionIndices[0] = c2pos1;
     origRegionIndices[1] = c2pos2;
@@ -612,9 +568,18 @@ int main(int argc, char *argv[])
   int mySize, c1NormSizeInBytes, c2NormSizeInBytes;
   long myFilePos, c1NormFilePosition, c2NormFilePosition;
 
+  // readFooter will assign the above variables
   readFooter(fin, master, c1, c2, norm, unit, binsize, mySize, myFilePos, c1NormSizeInBytes, c1NormFilePosition, c2NormSizeInBytes, c2NormFilePosition);
-  int blockBinCount, blockColumnCount;
 
+  vector<double> c1Norm;
+  vector<double> c2Norm;
+
+  if (norm != "NONE") {
+    c1Norm = readNormalizationVector(fin, c1NormSizeInBytes, c1NormFilePosition);
+    c2Norm = readNormalizationVector(fin, c2NormSizeInBytes, c2NormFilePosition);
+  }
+  int blockBinCount, blockColumnCount;
+  // readMatrix will assign blockBinCount and blockColumnCount
   readMatrix(fin, myFilePos, unit, binsize, blockBinCount, blockColumnCount); 
 
   set<int> blockNumbers = getBlockNumbersForRegionFromBinPosition(regionIndices, blockBinCount, blockColumnCount, c1==c2); 
@@ -622,14 +587,18 @@ int main(int argc, char *argv[])
   // getBlockIndices
   vector<contactRecord> records;
   for (set<int>::iterator it=blockNumbers.begin(); it!=blockNumbers.end(); ++it) {
+    // get contacts in this block
     records = readBlock(fin, *it);
     for (vector<contactRecord>::iterator it2=records.begin(); it2!=records.end(); ++it2) {
       contactRecord rec = *it2;
-
+      
       int xActual = rec.binX * binsize;
       int yActual = rec.binY * binsize;
       float counts = rec.counts;
-      //      cout << xActual << " " << yActual << " " << counts << endl;
+      if (norm != "NONE") {
+	counts = counts / (c1Norm[rec.binX] * c2Norm[rec.binY]);
+      }
+//      cout << xActual << " " << yActual << " " << counts << endl;
       if ((xActual >= origRegionIndices[0] && xActual <= origRegionIndices[1] &&
 	   yActual >= origRegionIndices[2] && yActual <= origRegionIndices[3]) ||
 	  // or check regions that overlap with lower left
