@@ -49,26 +49,33 @@ struct membuf : std::streambuf
   }
 };
 
+// pointer structure for reading blocks or matrices, holds the size and position 
 struct indexEntry {
   int size;
   long position;
 };
 
+// sparse matrix entry
 struct contactRecord {
   int binX;
   int binY;
   float counts;
 };
 
+// version number
 int version;
+
+// map of block numbers to pointers
 map <int, indexEntry> blockMap;
 
+// returns whether or not this is valid HiC file
 bool readMagicString(ifstream& fin) {
   string str;
   getline(fin, str, '\0' );
   return str[0]=='H' && str[1]=='I' && str[2]=='C';
 }
 
+// reads the header, storing the positions of the normalization vectors and returning the master pointer
 long readHeader(ifstream& fin, string chr1, string chr2, int &c1pos1, int &c1pos2, int &c2pos1, int &c2pos2, int &chr1ind, int &chr2ind) {
   if (!readMagicString(fin)) {
     cerr << "Hi-C magic string is missing, does not appear to be a hic file" << endl;
@@ -126,6 +133,9 @@ long readHeader(ifstream& fin, string chr1, string chr2, int &c1pos1, int &c1pos
   return master;
 }
 
+// reads the footer from the master pointer location. takes in the chromosomes, norm, unit (BP or FRAG) and resolution or 
+// binsize, and sets the file position of the matrix and the normalization vectors for those chromosomes at the given
+// normalization and resolution
 void readFooter(ifstream& fin, long master, int c1, int c2, string norm, string unit, int resolution, int &mySize, long &myFilePos, int &c1NormSizeInBytes, long &c1NormFilePosition, int &c2NormSizeInBytes, long &c2NormFilePosition) {
   fin.seekg(master, ios::beg);
   int nBytes;
@@ -241,6 +251,7 @@ void readFooter(ifstream& fin, long master, int c1, int c2, string norm, string 
   }
 }
 
+// reads the raw binned contact matrix at specified resolution, setting the block bin count and block column count 
 bool readMatrixZoomData(ifstream& fin, string myunit, int mybinsize, int &myBlockBinCount, int &myBlockColumnCount) {
   string unit;
   getline(fin, unit, '\0' ); // unit
@@ -264,11 +275,9 @@ bool readMatrixZoomData(ifstream& fin, string myunit, int mybinsize, int &myBloc
     myBlockColumnCount = blockColumnCount;
     storeBlockData = true;
   }
-//MatrixZoomData zd = new MatrixZoomData(chr1, chr2, zoom, blockBinCount, blockColumnCount, chr1Sites, chr2Sites, this);
   
   int nBlocks;
   fin.read((char*)&nBlocks, sizeof(int));
-  //HashMap<Integer, Preprocessor.IndexEntry> blockIndex = new HashMap<Integer, Preprocessor.IndexEntry>(nBlocks);
 
   for (int b = 0; b < nBlocks; b++) {
     int blockNumber;
@@ -285,6 +294,8 @@ bool readMatrixZoomData(ifstream& fin, string myunit, int mybinsize, int &myBloc
   return storeBlockData;
 }
 
+// goes to the specified file pointer and finds the raw contact matrix at specified resolution, calling readMatrixZoomData.
+// sets blockbincount and blockcolumncount
 void readMatrix(ifstream& fin, int myFilePosition, string unit, int resolution, int &myBlockBinCount, int &myBlockColumnCount) {
   fin.seekg(myFilePosition, ios::beg);
   int c1,c2;
@@ -303,7 +314,8 @@ void readMatrix(ifstream& fin, int myFilePosition, string unit, int resolution, 
     exit(1);
   }
 }
-// need blockbincount, blockcolumncount.
+// gets the blocks that need to be read for this slice of the data.  needs blockbincount, blockcolumncount, and whether
+// or not this is intrachromosomal.
 set<int> getBlockNumbersForRegionFromBinPosition(int* regionIndices, int blockBinCount, int blockColumnCount, bool intra) {
    int col1 = regionIndices[0] / blockBinCount;
    int col2 = (regionIndices[1] + 1) / blockBinCount;
@@ -332,7 +344,8 @@ set<int> getBlockNumbersForRegionFromBinPosition(int* regionIndices, int blockBi
    return blocksSet;
 }
 
-
+// this is the meat of reading the data.  takes in the block number and returns the set of contact records corresponding to
+// that block.  the block data is compressed and must be decompressed using the zlib library functions
 vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
   indexEntry idx = blockMap[blockNumber];
   if (idx.size == 0) {
@@ -358,13 +371,14 @@ vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
   inflate(&infstream, Z_NO_FLUSH);
   inflateEnd(&infstream);
   int uncompressedSize=infstream.total_out;
-  //cerr << "compression ratio: " << uncompressedSize*1.0/idx.size << endl;
+
   // create stream from buffer for ease of use
   membuf sbuf(uncompressedBytes, uncompressedBytes + uncompressedSize);
   istream bufferin(&sbuf);
   int nRecords;
   bufferin.read((char*)&nRecords, sizeof(int));
   vector<contactRecord> v(nRecords);
+  // different versions have different specific formats
   if (version < 7) {
     for (int i = 0; i < nRecords; i++) {
       int binX, binY;
@@ -420,7 +434,7 @@ vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
 	}
       }
     }
-    else if (type == 2) { // have yet to find test file where this is true
+    else if (type == 2) { // have yet to find test file where this is true, possibly entirely deprecated
       int nPts;
       bufferin.read((char*)&nPts, sizeof(int));
       short w;
@@ -461,10 +475,11 @@ vector<contactRecord> readBlock(ifstream& fin, int blockNumber) {
       }
     }
   }
-  delete uncompressedBytes;
+  delete uncompressedBytes; // don't forget to delete your heap arrays in C++!
   return v;
 }
 
+// reads the normalization vector from the file at the specified location
 vector<double> readNormalizationVector(ifstream& fin, int size, long position) {
   char buffer[size];
   fin.seekg(position, ios::beg);
