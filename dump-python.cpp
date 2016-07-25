@@ -30,6 +30,10 @@
 #include <vector>
 #include <boost/python.hpp>
 #include "zlib.h"
+#include <boost/python/module.hpp>
+#include <boost/python/def.hpp>
+
+
 using namespace std;
 
 #define CHUNK 16384
@@ -504,39 +508,39 @@ vector<double> readNormalizationVector(ifstream& fin, int size, long position) {
   return values;
 }
 
-int main(int argc, char *argv[])
+void dump(string myargv)
 {
-  if (argc != 7) {
-    cerr << "Not enough arguments" << endl;
-    cerr << "Usage: juicebox-quick-dump <NONE/VC/VC_SQRT/KR> <hicFile(s)> <chr1>[:x1:x2] <chr2>[:y1:y2] <BP/FRAG> <binsize>" << endl;
-    exit(1);
-  }
+  string norm, fname, chr1loc, chr2loc, unit, size;
+  istringstream iss(myargv);
+  iss >> norm;
+  iss >> fname;
+  iss >> chr1loc;
+  iss >> chr2loc;
+  iss >> unit;
+  iss >> size;
+  
 
-  string norm=argv[1];
   if (!(norm=="NONE"||norm=="VC"||norm=="VC_SQRT"||norm=="KR")) {
     cerr << "Norm specified incorrectly, must be one of <NONE/VC/VC_SQRT/KR>" << endl; 
     cerr << "Usage: juicebox-quick-dump <NONE/VC/VC_SQRT/KR> <hicFile(s)> <chr1>[:x1:x2] <chr2>[:y1:y2] <BP/FRAG> <binsize>" << endl;
     exit(1);
   }
 
-  string unit=argv[5];
   if (!(unit=="BP"||unit=="FRAG")) {
     cerr << "Norm specified incorrectly, must be one of <BP/FRAG>" << endl; 
     cerr << "Usage: juicebox-quick-dump <NONE/VC/VC_SQRT/KR> <hicFile(s)> <chr1>[:x1:x2] <chr2>[:y1:y2] <BP/FRAG> <binsize>" << endl;
     exit(1);
   }
 
-  string size=argv[6];
   int binsize=stoi(size);
 
-  ifstream fin(argv[2], fstream::in);
+  ifstream fin(fname.c_str(), fstream::in);
   if (!fin) {
-    cerr << "File " << argv[2] << " cannot be opened for reading" << endl;
+    cerr << "File " << fname << " cannot be opened for reading" << endl;
     exit(1);
   }
 
-  string ch=argv[3];
-  stringstream ss(ch);
+  stringstream ss(chr1loc);
   string chr1, chr2, x, y;
   int c1pos1=-100, c1pos2=-100, c2pos1=-100, c2pos2=-100;
   getline(ss, chr1, ':');
@@ -545,8 +549,7 @@ int main(int argc, char *argv[])
     c1pos2 = stoi(y);
   }
 
-  ch=argv[4];
-  stringstream ss1(ch);
+  stringstream ss1(chr2loc);
   getline(ss1, chr2, ':');
   if (getline(ss1, x, ':') && getline(ss1, y, ':')) {
     c2pos1 = stoi(x);
@@ -625,3 +628,8 @@ int main(int argc, char *argv[])
   }
 }
 
+BOOST_PYTHON_MODULE(dump_ext)
+{
+  using namespace boost::python;
+  def("dump", dump);
+}

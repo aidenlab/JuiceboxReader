@@ -6,6 +6,7 @@
 *.exe
 *.o
 *.so
+*.dylib
 juicebox-quick-dump
 
 # Packages #
