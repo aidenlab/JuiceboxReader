@@ -28,11 +28,9 @@
 #include <set>
 #include <streambuf>
 #include <vector>
-#include <boost/python.hpp>
 #include "zlib.h"
 using namespace std;
 
-#define CHUNK 16384
 /*
   Quick dump: fast C++ implementation of dump. Not as fully featured as the
   Java version. Reads the .hic file, finds the appropriate matrix and slice
