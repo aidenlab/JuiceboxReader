@@ -1,4 +1,6 @@
-# JuiceboxReader
+# Deprecated - see [Straw](https://github.com/aidenlab/straw)
+
+## JuiceboxReader
 Fast C++ implementation of reading/dump for .hic files. 
 
 Not as fully featured as the Java version. Reads the .hic file, finds 
